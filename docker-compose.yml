@@ -4,15 +4,15 @@ services:
     container_name: aerotrace-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: aerotrace
-      POSTGRES_USER: aerotrace
-      POSTGRES_PASSWORD: aerotrace_dev
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - aerotrace_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aerotrace -d aerotrace"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
