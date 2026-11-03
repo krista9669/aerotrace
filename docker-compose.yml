@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: aerotrace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aerotrace
+      POSTGRES_USER: aerotrace
+      POSTGRES_PASSWORD: aerotrace_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - aerotrace_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aerotrace -d aerotrace"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aerotrace_pgdata:
