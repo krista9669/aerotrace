@@ -1,11 +1,9 @@
-
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
     ForeignKey,
-    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -17,7 +15,7 @@ from app.core.database import Base
 
 
 def utc_now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Organisation(Base):
@@ -33,9 +31,7 @@ class Organisation(Base):
         DateTime(timezone=True), default=utc_now, nullable=False
     )
 
-    events: Mapped[list["LifecycleEvent"]] = relationship(
-        back_populates="organisation"
-    )
+    events: Mapped[list["LifecycleEvent"]] = relationship(back_populates="organisation")
 
 
 class Aircraft(Base):
@@ -44,14 +40,10 @@ class Aircraft(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    registration: Mapped[str] = mapped_column(
-        String(30), unique=True, nullable=False
-    )
+    registration: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     manufacturer: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
-    serial_number: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False
-    )
+    serial_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -65,9 +57,7 @@ class Engine(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    serial_number: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False
-    )
+    serial_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     manufacturer: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
 
@@ -81,12 +71,8 @@ class Engine(Base):
         DateTime(timezone=True), default=utc_now, nullable=False
     )
 
-    aircraft: Mapped["Aircraft | None"] = relationship(
-        back_populates="engines"
-    )
-    installations: Mapped[list["Installation"]] = relationship(
-        back_populates="engine"
-    )
+    aircraft: Mapped["Aircraft | None"] = relationship(back_populates="engines")
+    installations: Mapped[list["Installation"]] = relationship(back_populates="engine")
 
 
 class Component(Base):
@@ -119,9 +105,7 @@ class Component(Base):
     installations: Mapped[list["Installation"]] = relationship(
         back_populates="component"
     )
-    events: Mapped[list["LifecycleEvent"]] = relationship(
-        back_populates="component"
-    )
+    events: Mapped[list["LifecycleEvent"]] = relationship(back_populates="component")
 
 
 class Installation(Base):
@@ -151,12 +135,8 @@ class Installation(Base):
 
     installation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    component: Mapped["Component"] = relationship(
-        back_populates="installations"
-    )
-    engine: Mapped["Engine"] = relationship(
-        back_populates="installations"
-    )
+    component: Mapped["Component"] = relationship(back_populates="installations")
+    engine: Mapped["Engine"] = relationship(back_populates="installations")
 
 
 class LifecycleEvent(Base):
@@ -188,9 +168,5 @@ class LifecycleEvent(Base):
         DateTime(timezone=True), default=utc_now, nullable=False
     )
 
-    component: Mapped["Component"] = relationship(
-        back_populates="events"
-    )
-    organisation: Mapped["Organisation"] = relationship(
-        back_populates="events"
-    )
+    component: Mapped["Component"] = relationship(back_populates="events")
+    organisation: Mapped["Organisation"] = relationship(back_populates="events")

@@ -51,7 +51,14 @@ jobs:
         run: |
           python -c "from app.main import app; print(app.title)"
 
+      - name: Run Ruff linting
+        working-directory: backend
+        run: ruff check .
+
+      - name: Check code formatting
+        working-directory: backend
+        run: ruff format --check .
+
       - name: Run automated tests
         working-directory: backend
-        run: |
-          pytest -v
+        run: pytest -v

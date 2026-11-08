@@ -5,9 +5,7 @@ from app.core.database import engine
 
 def test_connection():
     with engine.connect() as connection:
-        result = connection.execute(
-            text("SELECT current_database()")
-        )
+        result = connection.execute(text("SELECT current_database()"))
         print("Connected to:", result.scalar())
 
 
