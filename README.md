@@ -12,7 +12,7 @@ Aircraft components move through complex lifecycle stages involving manufacturer
 
 This fragmentation makes it difficult to reconstruct a component's complete history and identify inconsistencies between records.
 
-## Our Approach
+## Approach
 
 AeroTrace aims to provide a unified component traceability infrastructure through:
 
@@ -56,11 +56,3 @@ aerotrace/
 5. Multi-organisation support
 6. Historical reconstruction and reconciliation
 7. Frontend and system validation
-
-## Project Scope
-
-The initial implementation focuses on serialized engine components and their lifecycle records.
-
-AeroTrace is initially an engineering and traceability platform. It is not a replacement for approved aviation maintenance records, regulatory approvals, or airworthiness release systems.
-
-All initial development and demonstrations will use synthetic data.
