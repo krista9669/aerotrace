@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import UTC, datetime
 
@@ -82,9 +81,7 @@ def test_component_identity_constraint():
         and constraint.name == "uq_component_identity"
     )
 
-    assert {
-        column.name for column in identity_constraint.columns
-    } == {
+    assert {column.name for column in identity_constraint.columns} == {
         "manufacturer",
         "part_number",
         "serial_number",
