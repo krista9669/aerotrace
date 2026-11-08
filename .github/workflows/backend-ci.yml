@@ -59,6 +59,6 @@ jobs:
         working-directory: backend
         run: ruff format --check .
 
-      - name: Run automated tests
+      - name: Run automated tests with coverage
         working-directory: backend
-        run: pytest -v
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=90
