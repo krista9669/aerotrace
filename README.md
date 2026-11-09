@@ -3,12 +3,13 @@
 
 AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, a relational database, and a foundation for future machine learning and visualisation capabilities.
 
-The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and component management endpoints for registration, listing, retrieval, and updating. The frontend, lifecycle-event workflows, and predictive maintenance capabilities remain planned work.
+The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and REST APIs for component management, organisation management, and lifecycle-event recording and retrieval. Frontend development, installation workflows, and predictive maintenance capabilities remain planned work.
 
 ## 1. Project Objectives
 
 - Maintain structured records of aircraft, engines, components, and organisations.
 - Track component identity and current status.
+- Record component lifecycle events and associate them with the relevant organisation.
 - Establish a relational foundation for component installation, removal, maintenance, and transfers.
 - Preserve data integrity through primary keys, foreign keys, uniqueness constraints, and versioned migrations.
 - Prepare historical lifecycle data for future anomaly detection and predictive maintenance research.
@@ -18,21 +19,18 @@ The current implementation includes a FastAPI backend, PostgreSQL persistence, a
 
 ### Component Management API
 
-The FastAPI application currently exposes the following component operations:
-
 | Method | Endpoint | Description | Success response |
 |---|---|---|---|
 | `POST` | `/components` | Register a component | `201 Created` |
 | `GET` | `/components` | List components with pagination | `200 OK` |
 | `GET` | `/components/{component_id}` | Retrieve a component by UUID | `200 OK` |
 | `PUT` | `/components/{component_id}` | Update a component's details and status | `200 OK` |
-| `GET` | `/health` | Check API service health | `200 OK` |
 
 The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`) query parameters.
 
-Component identifiers are UUIDs. Component creation validates its request through Pydantic schemas, persists the record through SQLAlchemy, and returns the created component. Retrieval and update operations return `404 Not Found` when the requested UUID does not exist. Component identity conflicts are returned as `409 Conflict` where the database uniqueness constraint is violated.
+Component identifiers are UUIDs. Component creation validates its request through Pydantic schemas and persists the record through SQLAlchemy. Retrieval and update operations return `404 Not Found` when the requested UUID does not exist. Component identity conflicts are returned as `409 Conflict` where a database uniqueness constraint is violated.
 
-The update operation currently uses `PUT`, so clients must submit all editable component fields:
+The update operation uses `PUT`, so clients must submit all editable component fields. Example request:
 
 ```json
 {
@@ -44,6 +42,67 @@ The update operation currently uses `PUT`, so clients must submit all editable c
 }
 ```
 
+### Organisation Management API
+
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `POST` | `/organisations` | Register an organisation | `201 Created` |
+| `GET` | `/organisations` | List organisations with pagination | `200 OK` |
+
+Organisation records include a name, organisation type, and unique organisation code. The list endpoint supports `skip` and `limit` pagination. A duplicate organisation code returns `409 Conflict`.
+
+Example creation request:
+
+```json
+{
+  "name": "Aero Maintenance Services",
+  "organisation_type": "MAINTENANCE",
+  "code": "AMS001"
+}
+```
+
+### Lifecycle Event API
+
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `POST` | `/lifecycle-events` | Record a lifecycle event for a component | `201 Created` |
+| `GET` | `/lifecycle-events` | List lifecycle events with optional filters and pagination | `200 OK` |
+| `GET` | `/lifecycle-events/{event_id}` | Retrieve a lifecycle event by UUID | `200 OK` |
+
+A lifecycle event is associated with both a component and an organisation. Event records include an event type, optional description, performer, occurrence timestamp, and database-generated recording timestamp.
+
+The create endpoint verifies that the referenced component and organisation exist before inserting the event. Missing references return `404 Not Found`; database integrity conflicts return `409 Conflict`. The `occurred_at` field must include a timezone. The API stores and returns the corresponding timestamp, normalised by the database/session configuration as applicable.
+
+The list endpoint supports optional filters:
+
+- `component_id`
+- `organisation_id`
+- `event_type`
+- `skip` and `limit` pagination parameters
+
+Results are ordered by occurrence time in descending order, with recording time used as a secondary descending sort. The individual retrieval endpoint returns `404 Not Found` when the event UUID does not exist.
+
+Example creation request (replace the UUIDs with existing records in your database):
+
+```json
+{
+  "component_id": "00000000-0000-0000-0000-000000000001",
+  "organisation_id": "00000000-0000-0000-0000-000000000002",
+  "event_type": "INSPECTION",
+  "description": "Routine inspection of hydraulic pump.",
+  "performed_by": "Maintenance Technician",
+  "occurred_at": "2026-11-10T09:00:00+05:30"
+}
+```
+
+Lifecycle events currently support creation and retrieval. Update and deletion endpoints have not been implemented.
+
+### Health Check
+
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `GET` | `/health` | Check API service health | `200 OK` |
+
 ### Database and Lifecycle Schema
 
 The initial Alembic migration creates six core tables:
@@ -53,18 +112,22 @@ The initial Alembic migration creates six core tables:
 | `aircraft` | Aircraft registration, manufacturer, model, and serial number |
 | `engines` | Engine identity and optional association with an aircraft |
 | `components` | Component part number, serial number, manufacturer, type, and status |
-| `organisations` | Organisation identity, type, and code |
+| `organisations` | Organisation identity, type, and unique code |
 | `lifecycle_events` | Component events, associated organisation, performer, and timestamps |
 | `installations` | Component-to-engine installation and removal records |
 
 The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints for key identifiers. The component identity constraint is defined over manufacturer, part number, and serial number. Alembic manages schema versioning and migration execution.
 
+The organisation and lifecycle-event APIs use the existing `organisations` and `lifecycle_events` tables created by the initial migration; no additional schema migration was required for these API additions.
+
 ### Backend and Configuration
 
 - FastAPI application with interactive OpenAPI documentation.
+- Pydantic request and response schemas.
 - Pydantic Settings for environment-based configuration.
 - SQLAlchemy ORM and a reusable database-session dependency.
 - Psycopg PostgreSQL driver.
+- Separate routers for components, organisations, and lifecycle events.
 
 ### Containerised Development
 
@@ -81,17 +144,16 @@ The repository contains GitHub Actions workflows for:
 - **Docker Build CI:** building the backend Docker image as a CI validation step.
 - **CodeQL Advanced:** automated code scanning for Python and GitHub Actions workflows.
 
-Workflow files are configured in the repository. Check the GitHub Actions tab for the latest execution results; workflow configuration alone does not guarantee that the latest run passed.
+The current local backend test run reports **33 passing tests and 100% total application coverage**. Workflow files are configured in the repository. Check the GitHub Actions tab for the latest execution results; workflow configuration alone does not guarantee that the latest run passed.
 
 ## 3. Planned System Modules
 
 ### Component Lifecycle Management
 
-- Lifecycle event creation and querying.
 - Installation and removal workflows.
-- Maintenance and inspection record management.
+- Maintenance and inspection record management beyond the current lifecycle-event API foundation.
 - Component transfer tracking.
-- Historical lifecycle reconstruction and querying.
+- Historical lifecycle reconstruction and querying enhancements.
 
 ### Machine Learning and Analytics
 
@@ -121,7 +183,6 @@ These are planned capabilities and should not be interpreted as implemented func
 | ORM | SQLAlchemy | Implemented |
 | Database migrations | Alembic | Initial migration created |
 | Database driver | Psycopg | Configured |
-| Graph processing | NetworkX | Dependency available; application use planned |
 | Containerisation | Docker, Docker Compose | Configured |
 | API documentation | OpenAPI / Swagger UI | Available through FastAPI |
 | Frontend | React, TypeScript | Planned |
@@ -152,34 +213,32 @@ flowchart TB
 
 ### Target Application Architecture
 
-The frontend, lifecycle services, data-integrity services, machine-learning services, and analytics views below are planned integrations.
+The frontend, installation workflows, machine-learning services, and analytics views below are planned integrations. Component, organisation, and lifecycle-event API foundations are implemented in the backend.
 
 ```mermaid
 flowchart TB
     User["User / Maintenance analyst"]
     UI["Frontend application<br/>React + TypeScript<br/>(planned)"]
-    API["FastAPI REST API<br/>(backend foundation in place)"]
-    subgraph Services["Application services — planned"]
-        Lifecycle["Component lifecycle management<br/>Registration · installation · removal · history"]
-        Integrity["Data integrity services<br/>Validation · relationship checks · audit rules"]
-        ML["Machine learning and analytics<br/>Preprocessing · anomaly detection · prediction"]
+    API["FastAPI REST API<br/>Components · Organisations · Lifecycle Events"]
+    subgraph Services["Application services"]
+        Components["Component management<br/>Registration · Listing · Retrieval · Update"]
+        Organisations["Organisation management<br/>Registration · Listing"]
+        Lifecycle["Lifecycle event management<br/>Creation · Filtering · Retrieval"]
+        Future["Future services<br/>Installation workflows · Predictive maintenance<br/>(planned)"]
     end
     ORM["SQLAlchemy persistence layer"]
     DB[("PostgreSQL 16")]
-    History["Historical component lifecycle data"]
-    Outputs["Analytics and visualisation<br/>Dashboards · reports · risk analysis<br/>(planned)"]
     User --> UI
     UI -.->|"REST / JSON"| API
-    API -.-> Lifecycle
-    API -.-> Integrity
-    API -.-> ML
-    Lifecycle -.-> ORM
-    Integrity -.-> ORM
-    ML -.->|"Read historical data"| ORM
+    API --> Components
+    API --> Organisations
+    API --> Lifecycle
+    API -.-> Future
+    Components --> ORM
+    Organisations --> ORM
+    Lifecycle --> ORM
+    Future -.-> ORM
     ORM --> DB
-    DB --> History
-    History -.-> Outputs
-    ML -.->|"Model outputs"| Outputs
 ```
 
 ## 6. Repository Structure
@@ -195,7 +254,9 @@ aerotrace/
 │   ├── app/
 │   │   ├── api/
 │   │   │   └── routes/
-│   │   │       └── components.py
+│   │   │       ├── components.py
+│   │   │       ├── organisations.py
+│   │   │       └── lifecycle_events.py
 │   │   ├── core/
 │   │   │   ├── config.py
 │   │   │   └── database.py
@@ -203,7 +264,9 @@ aerotrace/
 │   │   │   ├── __init__.py
 │   │   │   └── entities.py
 │   │   ├── schemas/
-│   │   │   └── component.py
+│   │   │   ├── component.py
+│   │   │   ├── organisation.py
+│   │   │   └── lifecycle_event.py
 │   │   └── main.py
 │   ├── migrations/
 │   │   ├── versions/
@@ -212,6 +275,8 @@ aerotrace/
 │   │   └── script.py.mako
 │   ├── tests/
 │   │   ├── test_component_routes.py
+│   │   ├── test_lifecycle_event_routes.py
+│   │   ├── test_organisation_routes.py
 │   │   ├── test_main.py
 │   │   └── test_models.py
 │   ├── Dockerfile
@@ -277,7 +342,7 @@ The backend is available at `http://127.0.0.1:8000`, and PostgreSQL is exposed o
 
 ### Apply Database Migrations
 
-Run the initial schema migration inside the backend container:
+Run the schema migration inside the backend container:
 
 ```bash
 docker compose exec backend alembic upgrade head
@@ -345,6 +410,8 @@ Do not start a second backend on port `8000` while the Docker backend is already
 | OpenAPI schema | http://127.0.0.1:8000/openapi.json |
 | Health check | http://127.0.0.1:8000/health |
 
+The Swagger UI groups the endpoints by router and can be used to exercise the component, organisation, and lifecycle-event operations.
+
 ## 8. Testing and Code Quality
 
 From the `backend` directory, install development dependencies:
@@ -355,13 +422,13 @@ pip install -r requirements-dev.txt
 
 Run the automated tests under the `tests` directory with coverage enforcement:
 
-The local command below deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
-
 ```bash
 python -m pytest tests --cov=app --cov-report=term-missing --cov-fail-under=90
 ```
 
-Run linting and formatting checks:
+The local test run currently reports 33 passing tests and 100% total application coverage. The command deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
+
+Run linting and formatting checks from the `backend` directory:
 
 ```bash
 ruff check .
@@ -381,16 +448,14 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 - [x] Backend Dockerfile and container orchestration.
 - [x] Initial relational schema for aircraft, engines, components, organisations, lifecycle events, and installations.
 - [x] Alembic migration for the initial core tables.
-- [x] Component registration API (`POST /components`).
-- [x] Component listing API (`GET /components`).
-- [x] Individual component retrieval API (`GET /components/{component_id}`).
-- [x] Component update API (`PUT /components/{component_id}`).
+- [x] Component registration, listing, retrieval, and update APIs.
+- [x] Organisation registration and listing APIs.
+- [x] Lifecycle-event creation, filtered listing, and individual retrieval APIs.
+- [x] Automated route tests for components, organisations, and lifecycle events.
+- [x] Local backend test run: 33 tests passed with 100% total application coverage.
 - [x] Backend CI, Docker build CI, and CodeQL workflows configured.
-- [x] Automated tests for component API success and error paths (20 tests; 100% app coverage locally).
-- [ ] Component deletion API.
-- [ ] Lifecycle event creation and query APIs.
+- [ ] Component deletion API (subject to lifecycle-data integrity requirements).
 - [ ] Installation and removal workflows.
-- [ ] Maintenance and inspection record APIs.
 - [ ] Authentication, authorisation, and audit controls.
 - [ ] Query optimisation and expanded integration testing.
 
@@ -398,6 +463,7 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 
 - [ ] React and TypeScript application.
 - [ ] Component and aircraft management screens.
+- [ ] Organisation management screens.
 - [ ] Lifecycle history interface.
 - [ ] Maintenance analytics dashboard.
 - [ ] Data visualisation and reporting.
