@@ -3,27 +3,46 @@
 
 AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, a relational database, and a foundation for future machine learning and visualisation capabilities.
 
-The current implementation establishes the backend service, PostgreSQL persistence infrastructure, initial lifecycle-domain schema, containerised development environment, database migrations, and automated quality checks. Component management APIs, the frontend, and predictive models are planned development areas.
+The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and component management endpoints for registration, listing, retrieval, and updating. The frontend, lifecycle-event workflows, and predictive maintenance capabilities remain planned work.
 
 ## 1. Project Objectives
 
 - Maintain structured records of aircraft, engines, components, and organisations.
-- Establish a traceable foundation for component installation and lifecycle events.
-- Store lifecycle information in a relational PostgreSQL database.
+- Track component identity and current status.
+- Establish a relational foundation for component installation, removal, maintenance, and transfers.
 - Preserve data integrity through primary keys, foreign keys, uniqueness constraints, and versioned migrations.
 - Prepare historical lifecycle data for future anomaly detection and predictive maintenance research.
 - Provide an application interface and analytics visualisations as the platform evolves.
 
-## 2. Current Implementation
+## 2. Implemented Functionality
 
-### Backend API
+### Component Management API
 
-- FastAPI application with service metadata and a health-check endpoint.
-- Environment-based configuration using Pydantic Settings.
-- SQLAlchemy database engine and declarative model foundation.
-- Interactive API documentation through FastAPI's OpenAPI interface.
+The FastAPI application currently exposes the following component operations:
 
-The health endpoint is currently the implemented API route; component and lifecycle CRUD endpoints remain on the roadmap.
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `POST` | `/components` | Register a component | `201 Created` |
+| `GET` | `/components` | List components with pagination | `200 OK` |
+| `GET` | `/components/{component_id}` | Retrieve a component by UUID | `200 OK` |
+| `PUT` | `/components/{component_id}` | Update a component's details and status | `200 OK` |
+| `GET` | `/health` | Check API service health | `200 OK` |
+
+The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`) query parameters.
+
+Component identifiers are UUIDs. Component creation validates its request through Pydantic schemas, persists the record through SQLAlchemy, and returns the created component. Retrieval and update operations return `404 Not Found` when the requested UUID does not exist. Component identity conflicts are returned as `409 Conflict` where the database uniqueness constraint is violated.
+
+The update operation currently uses `PUT`, so clients must submit all editable component fields:
+
+```json
+{
+  "part_number": "PN-1001",
+  "serial_number": "SN-2026-001",
+  "manufacturer": "Airbus",
+  "component_type": "HYDRAULIC_PUMP",
+  "status": "UNDER_INSPECTION"
+}
+```
 
 ### Database and Lifecycle Schema
 
@@ -38,7 +57,14 @@ The initial Alembic migration creates six core tables:
 | `lifecycle_events` | Component events, associated organisation, performer, and timestamps |
 | `installations` | Component-to-engine installation and removal records |
 
-The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints for key identifiers. Alembic manages schema versioning and migration execution.
+The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints for key identifiers. The component identity constraint is defined over manufacturer, part number, and serial number. Alembic manages schema versioning and migration execution.
+
+### Backend and Configuration
+
+- FastAPI application with interactive OpenAPI documentation.
+- Pydantic Settings for environment-based configuration.
+- SQLAlchemy ORM and a reusable database-session dependency.
+- Psycopg PostgreSQL driver.
 
 ### Containerised Development
 
@@ -55,13 +81,13 @@ The repository contains GitHub Actions workflows for:
 - **Docker Build CI:** building the backend Docker image as a CI validation step.
 - **CodeQL Advanced:** automated code scanning for Python and GitHub Actions workflows.
 
-These workflows are configured in the repository. Their latest execution status should be checked in the GitHub Actions tab.
+Workflow files are configured in the repository. Check the GitHub Actions tab for the latest execution results; workflow configuration alone does not guarantee that the latest run passed.
 
 ## 3. Planned System Modules
 
 ### Component Lifecycle Management
 
-- Component registration and identification APIs.
+- Lifecycle event creation and querying.
 - Installation and removal workflows.
 - Maintenance and inspection record management.
 - Component transfer tracking.
@@ -77,83 +103,71 @@ These workflows are configured in the repository. Their latest execution status 
 
 ### Full-Stack Application
 
-- Component management interface.
-- REST API integration.
+- React and TypeScript component management interface.
+- Aircraft and component views.
 - Maintenance analytics dashboard.
 - Lifecycle history visualisation.
 - Reporting and user-facing analytics.
 
-These are planned capabilities and should not be interpreted as already implemented functionality.
+These are planned capabilities and should not be interpreted as implemented functionality.
 
 ## 4. Technology Stack
 
 | Layer | Technology | Status |
 |---|---|---|
-| Backend | Python, FastAPI | Implemented foundation |
+| Backend | Python, FastAPI | Implemented |
+| Request/response validation | Pydantic | Implemented |
 | Database | PostgreSQL 16 | Configured |
-| ORM | SQLAlchemy | Configured |
+| ORM | SQLAlchemy | Implemented |
 | Database migrations | Alembic | Initial migration created |
 | Database driver | Psycopg | Configured |
 | Graph processing | NetworkX | Dependency available; application use planned |
 | Containerisation | Docker, Docker Compose | Configured |
-| API | REST, OpenAPI documentation | Initial API available |
+| API documentation | OpenAPI / Swagger UI | Available through FastAPI |
 | Frontend | React, TypeScript | Planned |
 | Data processing and ML | Pandas, NumPy, Scikit-learn | Planned |
 
 ## 5. Architecture
 
-AeroTrace is documented at two levels: the **current deployment architecture**, which shows what is running today, and the **target application architecture**, which shows how the planned user interface and domain services will connect to the existing backend and database foundation.
+AeroTrace is documented at two levels: the current deployment architecture, which shows the running infrastructure, and the target application architecture, which shows how planned user-interface and domain-service modules will connect to the backend and database.
 
 ### Current Deployment Architecture
-
-The current Docker Compose environment contains the FastAPI backend and PostgreSQL database. The backend connects to PostgreSQL through SQLAlchemy and Psycopg. Alembic applies database schema migrations, and PostgreSQL stores its data in a persistent named Docker volume.
 
 ```mermaid
 flowchart TB
     Client["Browser / API client"]
-
     subgraph Host["Developer machine / Docker host"]
         subgraph Compose["Docker Compose environment"]
             API["AeroTrace API<br/>FastAPI backend container<br/>Port 8000"]
             DB[("PostgreSQL 16<br/>Database container<br/>Port 5432")]
             Volume[("Persistent named volume<br/>aerotrace_pgdata")]
             Migration["Alembic migration tooling<br/>alembic upgrade head"]
-
             API -->|"SQLAlchemy + Psycopg"| DB
             Migration -->|"Apply schema revisions"| DB
             DB ---|"Persistent database files"| Volume
         end
-
         Client -->|"HTTP / REST"| API
     end
-
-    classDef implemented fill:#e8f5ec,stroke:#27834a,color:#173d25,stroke-width:1.5px;
-    class Client,API,DB,Volume,Migration implemented;
 ```
-
-**Current components:** FastAPI, SQLAlchemy, Psycopg, PostgreSQL 16, Alembic, Docker Compose, and the persistent PostgreSQL volume. The API currently exposes the health-check route; component and lifecycle operations are not yet implemented as API endpoints.
 
 ### Target Application Architecture
 
-The target architecture adds a React and TypeScript frontend and separates backend responsibilities into lifecycle management, data-integrity, and machine-learning services. These service modules, the frontend, and analytics outputs are planned; the diagram does not imply that they are already implemented.
+The frontend, lifecycle services, data-integrity services, machine-learning services, and analytics views below are planned integrations.
 
 ```mermaid
 flowchart TB
     User["User / Maintenance analyst"]
     UI["Frontend application<br/>React + TypeScript<br/>(planned)"]
     API["FastAPI REST API<br/>(backend foundation in place)"]
-
     subgraph Services["Application services — planned"]
         Lifecycle["Component lifecycle management<br/>Registration · installation · removal · history"]
         Integrity["Data integrity services<br/>Validation · relationship checks · audit rules"]
         ML["Machine learning and analytics<br/>Preprocessing · anomaly detection · prediction"]
     end
-
     ORM["SQLAlchemy persistence layer"]
     DB[("PostgreSQL 16")]
     History["Historical component lifecycle data"]
     Outputs["Analytics and visualisation<br/>Dashboards · reports · risk analysis<br/>(planned)"]
-
     User --> UI
     UI -.->|"REST / JSON"| API
     API -.-> Lifecycle
@@ -166,14 +180,7 @@ flowchart TB
     DB --> History
     History -.-> Outputs
     ML -.->|"Model outputs"| Outputs
-
-    classDef foundation fill:#e8f5ec,stroke:#27834a,color:#173d25,stroke-width:1.5px;
-    classDef planned fill:#f4f4f5,stroke:#737373,color:#333333,stroke-dasharray:5 5;
-    class User,API,ORM,DB,History foundation;
-    class UI,Lifecycle,Integrity,ML,Outputs planned;
 ```
-
-**Legend:** Solid green nodes identify the existing project foundation. Grey dashed nodes and dashed connections represent planned components or integrations.
 
 ## 6. Repository Structure
 
@@ -186,12 +193,17 @@ aerotrace/
 │       └── docker-ci.yml
 ├── backend/
 │   ├── app/
+│   │   ├── api/
+│   │   │   └── routes/
+│   │   │       └── components.py
 │   │   ├── core/
 │   │   │   ├── config.py
 │   │   │   └── database.py
 │   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   └── entities.py
+│   │   ├── schemas/
+│   │   │   └── component.py
 │   │   └── main.py
 │   ├── migrations/
 │   │   ├── versions/
@@ -199,9 +211,9 @@ aerotrace/
 │   │   ├── env.py
 │   │   └── script.py.mako
 │   ├── tests/
+│   │   ├── test_component_routes.py
 │   │   ├── test_main.py
 │   │   └── test_models.py
-│   ├── .dockerignore
 │   ├── Dockerfile
 │   ├── alembic.ini
 │   ├── requirements.txt
@@ -239,13 +251,13 @@ POSTGRES_PASSWORD=change_me
 
 Replace the example password with a strong local development password. Keep real `.env` files out of version control; do not commit passwords or other secrets.
 
-For direct local backend execution, create `backend/.env` with a connection string for your local PostgreSQL instance:
+For direct local backend execution, create `backend/.env` with a connection string for your PostgreSQL instance:
 
 ```env
 DATABASE_URL=postgresql+psycopg://aerotrace:your_password@localhost:5432/aerotrace
 ```
 
-Use the actual username, password, host, and database configured in your environment. The direct-local connection string should match the database credentials used by PostgreSQL.
+Use the actual username, password, host, and database configured in your environment. The local connection string must match the PostgreSQL credentials. When running the backend in Docker Compose, Compose supplies `DATABASE_URL` to the container using the `postgres` service hostname.
 
 ### Start the Application with Docker Compose
 
@@ -255,7 +267,7 @@ From the repository root:
 docker compose up --build -d
 ```
 
-Check the service status:
+Check service status:
 
 ```bash
 docker compose ps
@@ -292,19 +304,19 @@ cd backend
 python -m venv .venv
 ```
 
-Activate it on Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
 
-Activate it on Windows Command Prompt:
+Windows Command Prompt:
 
 ```bat
 .venv\Scripts\activate.bat
 ```
 
-Activate it on Linux/macOS:
+Linux/macOS:
 
 ```bash
 source .venv/bin/activate
@@ -325,15 +337,13 @@ uvicorn app.main:app --reload
 
 Do not start a second backend on port `8000` while the Docker backend is already using that port.
 
-### API Documentation and Health Check
+### API Documentation
 
 | Resource | URL |
 |---|---|
 | Interactive API documentation | http://127.0.0.1:8000/docs |
 | OpenAPI schema | http://127.0.0.1:8000/openapi.json |
 | Health check | http://127.0.0.1:8000/health |
-
-The health endpoint reports the API service status. It is not currently a database-readiness or full application-dependency check.
 
 ## 8. Testing and Code Quality
 
@@ -343,10 +353,12 @@ From the `backend` directory, install development dependencies:
 pip install -r requirements-dev.txt
 ```
 
-Run the test suite with coverage enforcement:
+Run the automated tests under the `tests` directory with coverage enforcement:
+
+The local command below deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
 
 ```bash
-pytest --cov=app --cov-report=term-missing --cov-fail-under=90
+python -m pytest tests --cov=app --cov-report=term-missing --cov-fail-under=90
 ```
 
 Run linting and formatting checks:
@@ -356,7 +368,7 @@ ruff check .
 ruff format --check .
 ```
 
-The GitHub Actions workflows run backend checks, migration validation, Docker image builds, and CodeQL analysis on their configured triggers. Review the Actions tab for the status of the latest runs.
+The Backend CI workflow also validates migrations against a fresh CI PostgreSQL database. Check GitHub Actions for the latest workflow results.
 
 ## 9. Development Roadmap
 
@@ -364,16 +376,18 @@ The GitHub Actions workflows run backend checks, migration validation, Docker im
 
 - [x] Initial FastAPI backend setup.
 - [x] Environment-based application configuration.
-- [x] SQLAlchemy database foundation.
+- [x] SQLAlchemy database foundation and database-session dependency.
 - [x] PostgreSQL 16 Docker Compose service with persistent storage.
 - [x] Backend Dockerfile and container orchestration.
 - [x] Initial relational schema for aircraft, engines, components, organisations, lifecycle events, and installations.
 - [x] Alembic migration for the initial core tables.
-- [x] Migration upgrade and schema-drift validation configured in backend CI.
-- [x] Backend automated tests, coverage enforcement, and Ruff checks configured.
-- [x] Docker image build validation configured in CI.
-- [x] CodeQL workflow for Python and GitHub Actions configured.
-- [ ] Component registration and retrieval APIs.
+- [x] Component registration API (`POST /components`).
+- [x] Component listing API (`GET /components`).
+- [x] Individual component retrieval API (`GET /components/{component_id}`).
+- [x] Component update API (`PUT /components/{component_id}`).
+- [x] Backend CI, Docker build CI, and CodeQL workflows configured.
+- [x] Automated tests for component API success and error paths (20 tests; 100% app coverage locally).
+- [ ] Component deletion API.
 - [ ] Lifecycle event creation and query APIs.
 - [ ] Installation and removal workflows.
 - [ ] Maintenance and inspection record APIs.

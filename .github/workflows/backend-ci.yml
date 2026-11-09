@@ -1,4 +1,3 @@
-
 name: Backend CI
 
 on:
@@ -61,7 +60,7 @@ jobs:
 
       - name: Run automated tests with coverage
         working-directory: backend
-        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=90
+        run: python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=90
 
       - name: Validate database migrations
         working-directory: backend
