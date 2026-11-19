@@ -1,13 +1,15 @@
+
 from typing import Annotated
 from uuid import UUID
 
-from app.core.database import get_db
-from app.models import Aircraft
-from app.schemas.aircraft import AircraftCreate, AircraftResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.models import Aircraft
+from app.schemas.aircraft import AircraftCreate, AircraftResponse
 
 router = APIRouter(
     prefix="/aircraft",

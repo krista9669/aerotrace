@@ -1,13 +1,15 @@
+
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+
 from app.core.database import get_db
 from app.main import app
 from app.models import Aircraft
-from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
 
 AIRCRAFT_ID = uuid.UUID("71b6f280-4d5d-4fa5-9a29-123456789001")
 CREATED_AT = datetime(2026, 11, 19, 10, 0, tzinfo=UTC)
