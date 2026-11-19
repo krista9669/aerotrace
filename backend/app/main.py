@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.routes.aircraft import router as aircraft_router
 from app.api.routes.components import router as components_router
 from app.api.routes.engines import router as engines_router
 from app.api.routes.installations import router as installations_router
@@ -12,6 +13,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(aircraft_router)
 app.include_router(components_router)
 app.include_router(engines_router)
 app.include_router(installations_router)

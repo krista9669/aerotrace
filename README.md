@@ -1,21 +1,67 @@
 # AeroTrace
 ### Aircraft Component Lifecycle Tracking and Predictive Maintenance Platform
 
-AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, a relational database, and a foundation for future machine learning and visualisation capabilities.
+AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, a relational database, and a foundation for future machine-learning and visualisation capabilities.
 
-The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and REST APIs for component, engine, organisation, lifecycle-event, and component installation management. The backend supports recording component installation and removal while preserving installation history. Frontend development and predictive maintenance capabilities remain planned work.
+The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and REST APIs for aircraft, engines, components, organisations, lifecycle events, and component installation/removal. The backend supports recording component installation and removal while preserving installation history. Frontend development and predictive-maintenance capabilities remain planned work.
 
 ## 1. Project Objectives
 
 - Maintain structured records of aircraft, engines, components, and organisations.
+- Associate engines with aircraft while allowing engines to remain unassigned when appropriate.
 - Track component identity and current status.
 - Record component lifecycle events and associate them with the relevant organisation.
 - Track component installation on engines, removal, and historical installation records.
 - Preserve data integrity through primary keys, foreign keys, uniqueness constraints, and versioned migrations.
-- Prepare historical lifecycle data for future anomaly detection and predictive maintenance research.
-- Provide an application interface and analytics visualisations as the platform evolves.
+- Prepare historical lifecycle data for future anomaly detection and predictive-maintenance research.
 
 ## 2. Implemented Functionality
+
+### Aircraft Management API
+
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `POST` | `/aircraft` | Register an aircraft | `201 Created` |
+| `GET` | `/aircraft` | List aircraft with pagination | `200 OK` |
+| `GET` | `/aircraft/{aircraft_id}` | Retrieve an aircraft by UUID | `200 OK` |
+
+Aircraft records include a registration, manufacturer, model, serial number, and database-generated creation timestamp. Registration and serial number are unique. Duplicate values return `409 Conflict`; a missing aircraft UUID returns `404 Not Found`.
+
+The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`) query parameters.
+
+Example creation request:
+
+```json
+{
+  "registration": "VT-XYZ",
+  "manufacturer": "Airbus",
+  "model": "A320neo",
+  "serial_number": "AIR-2026-002"
+}
+```
+
+### Engine Management API
+
+| Method | Endpoint | Description | Success response |
+|---|---|---|---|
+| `POST` | `/engines` | Register an engine | `201 Created` |
+| `GET` | `/engines` | List engines with pagination | `200 OK` |
+| `GET` | `/engines/{engine_id}` | Retrieve an engine by UUID | `200 OK` |
+
+Engine records contain a serial number, manufacturer, model, and optional `aircraft_id`. An engine can be registered without assigning it to an aircraft. When an `aircraft_id` is supplied, the API checks that the aircraft exists. Duplicate engine serial numbers return `409 Conflict`; a missing referenced aircraft returns `404 Not Found`.
+
+Example creation request with an aircraft association (replace the UUID with an existing aircraft ID):
+
+```json
+{
+  "serial_number": "ENG-2026-002",
+  "manufacturer": "CFM International",
+  "model": "LEAP-1A",
+  "aircraft_id": "303fe6bc-68b2-4227-8c7c-d40cd5e904f5"
+}
+```
+
+The engine list endpoint supports `skip` and `limit` pagination parameters. The individual retrieval endpoint returns `404 Not Found` when the engine UUID does not exist.
 
 ### Component Management API
 
@@ -41,28 +87,6 @@ The update operation uses `PUT`, so clients must submit all editable component f
   "status": "REGISTERED"
 }
 ```
-
-### Engine Management API
-
-| Method | Endpoint | Description | Success response |
-|---|---|---|---|
-| `POST` | `/engines` | Register an engine | `201 Created` |
-| `GET` | `/engines` | List engines with pagination | `200 OK` |
-| `GET` | `/engines/{engine_id}` | Retrieve an engine by UUID | `200 OK` |
-
-Engine records contain a serial number, manufacturer, model, and optional `aircraft_id`. An engine can be registered without assigning it to an aircraft. When an `aircraft_id` is supplied, the API checks that the aircraft exists. Duplicate engine serial numbers return `409 Conflict`; a missing referenced aircraft returns `404 Not Found`.
-
-Example creation request:
-
-```json
-{
-  "serial_number": "ENG-2026-001",
-  "manufacturer": "CFM International",
-  "model": "LEAP-1A"
-}
-```
-
-The engine list endpoint supports `skip` and `limit` pagination parameters. The individual retrieval endpoint returns `404 Not Found` when the engine UUID does not exist.
 
 ### Organisation Management API
 
@@ -187,7 +211,7 @@ The initial Alembic migration creates six core tables:
 
 The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints for key identifiers. The component identity constraint is defined over manufacturer, part number, and serial number. Alembic manages schema versioning and migration execution.
 
-The Engine, Organisation, Lifecycle Event, and Installation APIs use tables already created by the initial migration. No additional schema migration was required for these API additions.
+The Aircraft, Engine, Organisation, Lifecycle Event, and Installation APIs use tables already created by the initial migration. The Aircraft API addition required no new schema migration because the aircraft table and model were already part of the initial schema.
 
 ### Backend and Configuration
 
@@ -196,7 +220,7 @@ The Engine, Organisation, Lifecycle Event, and Installation APIs use tables alre
 - Pydantic Settings for environment-based configuration.
 - SQLAlchemy ORM and a reusable database-session dependency.
 - Psycopg PostgreSQL driver.
-- Separate routers for components, engines, organisations, lifecycle events, and installations.
+- Separate routers for aircraft, components, engines, organisations, lifecycle events, and installations.
 
 ### Containerised Development
 
@@ -213,7 +237,7 @@ The repository contains GitHub Actions workflows for:
 - **Docker Build CI:** building the backend Docker image as a CI validation step.
 - **CodeQL Advanced:** automated code scanning for Python and GitHub Actions workflows.
 
-The latest local backend test run for this milestone reports **61 passing tests and 100% total application coverage**. Ruff linting and formatting checks also pass locally. Check the GitHub Actions tab for the latest remote workflow results; workflow configuration alone does not guarantee that the latest run passed.
+The latest local backend test run for the Aircraft Management milestone reports **68 passing tests and 100% total application coverage** (491 statements, zero missed). Ruff linting and formatting checks should be run before committing. Check the GitHub Actions tab for the latest remote workflow results; workflow configuration alone does not guarantee that the latest run passed.
 
 ## 3. Planned System Modules
 
@@ -287,23 +311,39 @@ flowchart TB
 flowchart TB
     Client["Swagger UI / API client"] --> API["FastAPI application"]
     subgraph Routers["Implemented API routers"]
+        Aircraft["Aircraft"]
         Components["Components"]
         Engines["Engines"]
         Organisations["Organisations"]
         Events["Lifecycle events"]
         Installations["Installations and removals"]
     end
+    API --> Aircraft
     API --> Components
     API --> Engines
     API --> Organisations
     API --> Events
     API --> Installations
-    Components --> ORM["SQLAlchemy ORM"]
+    Aircraft --> ORM["SQLAlchemy ORM"]
+    Components --> ORM
     Engines --> ORM
     Organisations --> ORM
     Events --> ORM
     Installations --> ORM
     ORM --> DB[("PostgreSQL 16")]
+```
+
+### Aircraft and Engine Relationship
+
+An aircraft can be associated with multiple engines. Each engine stores an optional foreign key to its aircraft. The current API supports aircraft registration and retrieval, as well as engine registration with an existing `aircraft_id`.
+
+```mermaid
+flowchart TB
+    Aircraft["Aircraft<br/>registration · manufacturer · model"]
+    Engine1["Engine 1<br/>serial number · model"]
+    Engine2["Engine 2<br/>serial number · model"]
+    Aircraft --> Engine1
+    Aircraft --> Engine2
 ```
 
 ### Target Application Architecture
@@ -314,7 +354,7 @@ The frontend, machine-learning services, and analytics views below are planned i
 flowchart TB
     User["User / Maintenance analyst"]
     UI["Frontend application<br/>React + TypeScript<br/>(planned)"]
-    API["FastAPI REST API<br/>Components · Engines · Organisations<br/>Lifecycle Events · Installations"]
+    API["FastAPI REST API<br/>Aircraft · Engines · Components<br/>Organisations · Lifecycle Events · Installations"]
     subgraph Services["Future application services — planned"]
         ML["Machine learning and analytics<br/>Preprocessing · Anomaly detection · Prediction"]
         Reports["Analytics and visualisation<br/>Dashboards · Reports · Risk analysis"]
@@ -343,6 +383,7 @@ aerotrace/
 │   ├── app/
 │   │   ├── api/
 │   │   │   └── routes/
+│   │   │       ├── aircraft.py
 │   │   │       ├── components.py
 │   │   │       ├── engines.py
 │   │   │       ├── installations.py
@@ -355,6 +396,7 @@ aerotrace/
 │   │   │   ├── __init__.py
 │   │   │   └── entities.py
 │   │   ├── schemas/
+│   │   │   ├── aircraft.py
 │   │   │   ├── component.py
 │   │   │   ├── engine.py
 │   │   │   ├── installation.py
@@ -367,6 +409,7 @@ aerotrace/
 │   │   ├── env.py
 │   │   └── script.py.mako
 │   ├── tests/
+│   │   ├── test_aircraft_routes.py
 │   │   ├── test_component_routes.py
 │   │   ├── test_engine_routes.py
 │   │   ├── test_installation_routes.py
@@ -512,7 +555,7 @@ This leaves the PostgreSQL service and its persistent volume in place.
 | OpenAPI schema | http://127.0.0.1:8000/openapi.json |
 | Health check | http://127.0.0.1:8000/health |
 
-The Swagger UI groups the endpoints by router and can be used to exercise component, engine, organisation, lifecycle-event, and installation operations.
+The Swagger UI groups the endpoints by router and can be used to exercise aircraft, component, engine, organisation, lifecycle-event, and installation operations.
 
 ## 8. Testing and Code Quality
 
@@ -528,7 +571,7 @@ Run the automated tests under the `tests` directory with coverage enforcement:
 python -m pytest tests --cov=app --cov-report=term-missing --cov-fail-under=90
 ```
 
-The latest local test run for the installation/removal milestone reports **61 passing tests and 100% total application coverage**. The command deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
+The latest local test run for the Aircraft Management milestone reports **68 passing tests and 100% total application coverage (491 statements, zero missed)**. The command deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
 
 Run linting and formatting checks from the `backend` directory:
 
@@ -550,14 +593,16 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 - [x] Backend Dockerfile and container orchestration.
 - [x] Initial relational schema for aircraft, engines, components, organisations, lifecycle events, and installations.
 - [x] Alembic migration for the initial core tables.
+- [x] Aircraft registration, listing, and retrieval APIs.
+- [x] Engine registration, listing, and retrieval APIs, including optional aircraft association.
 - [x] Component registration, listing, retrieval, and update APIs.
-- [x] Engine registration, listing, and retrieval APIs.
 - [x] Organisation registration and listing APIs.
 - [x] Lifecycle-event creation, filtered listing, and individual retrieval APIs.
 - [x] Component installation, installation history, and removal APIs.
 - [x] Component status transitions on installation and removal.
-- [x] Automated route tests for components, engines, organisations, lifecycle events, and installations.
-- [x] Local backend test run: 61 tests passed with 100% total application coverage.
+- [x] Automated route tests for aircraft, components, engines, organisations, lifecycle events, and installations.
+- [x] Local backend test run: 68 tests passed with 100% total application coverage.
+- [x] Aircraft and engine association verified through the running API.
 - [x] Backend CI, Docker build CI, and CodeQL workflows configured.
 - [ ] Authentication, authorisation, and audit controls.
 - [ ] Expanded integration and concurrency testing against PostgreSQL.
@@ -566,7 +611,7 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 ### Frontend
 
 - [ ] React and TypeScript application.
-- [ ] Component, aircraft, and engine management screens.
+- [ ] Aircraft, engine, and component management screens.
 - [ ] Organisation management screens.
 - [ ] Installation and removal workflow interface.
 - [ ] Lifecycle history interface.
@@ -590,9 +635,9 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 
 ## 10. Project Scope and Safety
 
-AeroTrace is an experimental aviation technology platform focused on software engineering, database management, and machine learning applications in aircraft component lifecycle analysis.
+AeroTrace is an experimental aviation technology platform focused on software engineering, database management, and machine-learning applications in aircraft component lifecycle analysis.
 
-Machine learning outputs are intended for analytical and research purposes only. They are not substitutes for certified aviation maintenance procedures, approved maintenance data, or regulatory assessments. The platform is not intended to make airworthiness decisions.
+Machine-learning outputs are intended for analytical and research purposes only. They are not substitutes for certified aviation maintenance procedures, approved maintenance data, or regulatory assessments. The platform is not intended to make airworthiness decisions.
 
 ## 11. Project Information
 
@@ -601,7 +646,7 @@ Machine learning outputs are intended for analytical and research purposes only.
 | Project Name | AeroTrace |
 | Domain | Aviation Technology |
 | Project Type | Full-Stack Application (in development) |
-| Core Areas | Component Lifecycle Management, Database Engineering, Machine Learning, Web Development |
+| Core Areas | Aircraft and Component Lifecycle Management, Database Engineering, Machine Learning, Web Development |
 | Backend | Python, FastAPI |
 | Database | PostgreSQL 16 |
 | ORM and Migrations | SQLAlchemy, Alembic |
