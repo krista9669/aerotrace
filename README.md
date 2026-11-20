@@ -1,35 +1,33 @@
 # AeroTrace
 ### Aircraft Component Lifecycle Tracking and Predictive Maintenance Platform
 
-AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, a relational database, and a foundation for future machine-learning and visualisation capabilities.
+AeroTrace is an aviation technology platform for aircraft component lifecycle management and maintenance analytics. It combines a Python backend, PostgreSQL, and a foundation for future machine-learning and visualisation capabilities.
 
-The current implementation includes a FastAPI backend, PostgreSQL persistence, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and REST APIs for aircraft, engines, components, organisations, lifecycle events, and component installation/removal. The backend supports recording component installation and removal while preserving installation history. Frontend development and predictive-maintenance capabilities remain planned work.
+The current implementation includes a FastAPI backend, a six-table lifecycle-domain schema, Alembic migrations, Docker Compose infrastructure, and REST APIs for aircraft, engines, components, organisations, lifecycle events, component installations/removals, and aircraft-level traceability. The backend preserves installation history and can assemble an aircraft's associated engine, component, installation, and lifecycle-event records into one nested response. Frontend development and predictive-maintenance capabilities remain planned work.
 
 ## 1. Project Objectives
 
 - Maintain structured records of aircraft, engines, components, and organisations.
-- Associate engines with aircraft while allowing engines to remain unassigned when appropriate.
-- Track component identity and current status.
-- Record component lifecycle events and associate them with the relevant organisation.
-- Track component installation on engines, removal, and historical installation records.
-- Preserve data integrity through primary keys, foreign keys, uniqueness constraints, and versioned migrations.
-- Prepare historical lifecycle data for future anomaly detection and predictive-maintenance research.
+- Associate engines with aircraft while allowing unassigned engines.
+- Track component identity, status, installation, removal, and installation history.
+- Record component lifecycle events and the organisations responsible for them.
+- Retrieve aircraft-level traceability across engines, installations, components, and recorded events.
+- Preserve data integrity using primary keys, foreign keys, uniqueness constraints, and versioned migrations.
+- Prepare lifecycle data for future anomaly detection and predictive-maintenance research.
 
 ## 2. Implemented Functionality
 
 ### Aircraft Management API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/aircraft` | Register an aircraft | `201 Created` |
 | `GET` | `/aircraft` | List aircraft with pagination | `200 OK` |
 | `GET` | `/aircraft/{aircraft_id}` | Retrieve an aircraft by UUID | `200 OK` |
 
-Aircraft records include a registration, manufacturer, model, serial number, and database-generated creation timestamp. Registration and serial number are unique. Duplicate values return `409 Conflict`; a missing aircraft UUID returns `404 Not Found`.
+Aircraft records include registration, manufacturer, model, serial number, and a database-generated creation timestamp. Registration and serial number are unique. Duplicate values return `409 Conflict`; a missing aircraft UUID returns `404 Not Found`. The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`).
 
-The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`) query parameters.
-
-Example creation request:
+Example request:
 
 ```json
 {
@@ -42,15 +40,15 @@ Example creation request:
 
 ### Engine Management API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/engines` | Register an engine | `201 Created` |
 | `GET` | `/engines` | List engines with pagination | `200 OK` |
 | `GET` | `/engines/{engine_id}` | Retrieve an engine by UUID | `200 OK` |
 
-Engine records contain a serial number, manufacturer, model, and optional `aircraft_id`. An engine can be registered without assigning it to an aircraft. When an `aircraft_id` is supplied, the API checks that the aircraft exists. Duplicate engine serial numbers return `409 Conflict`; a missing referenced aircraft returns `404 Not Found`.
+An engine contains a serial number, manufacturer, model, and optional `aircraft_id`. When an aircraft ID is supplied, the API verifies that the aircraft exists. Duplicate engine serial numbers return `409 Conflict`; a missing referenced aircraft returns `404 Not Found`.
 
-Example creation request with an aircraft association (replace the UUID with an existing aircraft ID):
+Example request with an aircraft association (use an existing aircraft UUID):
 
 ```json
 {
@@ -61,22 +59,18 @@ Example creation request with an aircraft association (replace the UUID with an 
 }
 ```
 
-The engine list endpoint supports `skip` and `limit` pagination parameters. The individual retrieval endpoint returns `404 Not Found` when the engine UUID does not exist.
-
 ### Component Management API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/components` | Register a component | `201 Created` |
 | `GET` | `/components` | List components with pagination | `200 OK` |
 | `GET` | `/components/{component_id}` | Retrieve a component by UUID | `200 OK` |
-| `PUT` | `/components/{component_id}` | Update a component's details and status | `200 OK` |
+| `PUT` | `/components/{component_id}` | Update component details and status | `200 OK` |
 
-The list endpoint supports `skip` (default `0`, minimum `0`) and `limit` (default `100`, range `1–500`) query parameters.
+Component identity is constrained by manufacturer, part number, and serial number. Missing component IDs return `404 Not Found`; duplicate component identity returns `409 Conflict`. The list endpoint supports `skip` and `limit` pagination. The update operation uses `PUT`, so clients submit all editable fields.
 
-Component identifiers are UUIDs. Component creation validates its request through Pydantic schemas and persists the record through SQLAlchemy. Retrieval and update operations return `404 Not Found` when the requested UUID does not exist. Component identity conflicts are returned as `409 Conflict` where a database uniqueness constraint is violated.
-
-The update operation uses `PUT`, so clients must submit all editable component fields. Example request:
+Example request:
 
 ```json
 {
@@ -90,14 +84,14 @@ The update operation uses `PUT`, so clients must submit all editable component f
 
 ### Organisation Management API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/organisations` | Register an organisation | `201 Created` |
 | `GET` | `/organisations` | List organisations with pagination | `200 OK` |
 
-Organisation records include a name, organisation type, and unique organisation code. The list endpoint supports `skip` and `limit` pagination. A duplicate organisation code returns `409 Conflict`.
+Organisation records contain a name, organisation type, and unique organisation code. Duplicate codes return `409 Conflict`.
 
-Example creation request:
+Example request:
 
 ```json
 {
@@ -109,26 +103,17 @@ Example creation request:
 
 ### Lifecycle Event API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/lifecycle-events` | Record a lifecycle event for a component | `201 Created` |
-| `GET` | `/lifecycle-events` | List lifecycle events with optional filters and pagination | `200 OK` |
-| `GET` | `/lifecycle-events/{event_id}` | Retrieve a lifecycle event by UUID | `200 OK` |
+| `GET` | `/lifecycle-events` | List events with optional filters and pagination | `200 OK` |
+| `GET` | `/lifecycle-events/{event_id}` | Retrieve an event by UUID | `200 OK` |
 
-A lifecycle event is associated with both a component and an organisation. Event records include an event type, optional description, performer, occurrence timestamp, and database-generated recording timestamp.
+Each lifecycle event is associated with a component and an organisation. It includes an event type, optional description, performer, occurrence timestamp, and database-generated recording timestamp. The API verifies that the component and organisation exist. Missing references return `404 Not Found`; integrity conflicts return `409 Conflict`. `occurred_at` must include a timezone.
 
-The create endpoint verifies that the referenced component and organisation exist before inserting the event. Missing references return `404 Not Found`; database integrity conflicts return `409 Conflict`. The `occurred_at` field must include a timezone.
+The list endpoint supports optional `component_id`, `organisation_id`, and `event_type` filters plus `skip` and `limit`. Results are ordered by occurrence time and recording time, both descending. Lifecycle events currently support creation and retrieval; update and delete endpoints are not implemented.
 
-The list endpoint supports optional filters:
-
-- `component_id`
-- `organisation_id`
-- `event_type`
-- `skip` and `limit` pagination parameters
-
-Results are ordered by occurrence time in descending order, with recording time used as a secondary descending sort. Lifecycle events currently support creation and retrieval; update and deletion endpoints have not been implemented.
-
-Example creation request (replace the UUIDs with existing records in your database):
+Example request (replace the UUIDs with existing records):
 
 ```json
 {
@@ -143,35 +128,20 @@ Example creation request (replace the UUIDs with existing records in your databa
 
 ### Component Installation and Removal API
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `POST` | `/installations` | Install a component on an engine | `201 Created` |
 | `GET` | `/installations` | List installation history with optional filters and pagination | `200 OK` |
-| `GET` | `/installations/{installation_id}` | Retrieve an installation record by UUID | `200 OK` |
-| `POST` | `/installations/{installation_id}/remove` | Record removal of an installed component | `200 OK` |
+| `GET` | `/installations/{installation_id}` | Retrieve an installation record | `200 OK` |
+| `POST` | `/installations/{installation_id}/remove` | Record component removal | `200 OK` |
 
-The installation workflow uses the existing `installations` table. Each record associates a component with an engine and stores:
+An installation associates a component with an engine and stores timezone-aware `installed_at`, nullable `removed_at` (null means active), and optional `installation_notes`.
 
-- `installed_at`: timezone-aware installation timestamp.
-- `removed_at`: nullable removal timestamp; `null` indicates an active installation.
-- `installation_notes`: optional notes about the installation.
+The workflow requires the component and engine to exist, and the component to have `REGISTERED` status. A component cannot have more than one active installation. Installation changes component status to `INSTALLED`. Removal records a timestamp later than `installed_at`, changes component status back to `REGISTERED`, and updates the existing installation record rather than deleting it. If `removed_at` is omitted, the API uses current UTC time. Missing records return `404 Not Found`; invalid states and conflicts return `409 Conflict`; invalid timestamp ordering returns `422 Unprocessable Entity`.
 
-The API enforces the following workflow rules:
+The list endpoint supports `component_id`, `engine_id`, `skip`, and `limit` filters. Results are ordered by installation time descending.
 
-1. The component and engine must exist before an installation can be created.
-2. A component must have `REGISTERED` status before installation.
-3. A component cannot have more than one active installation. An active installation is one whose `removed_at` is `null`.
-4. A successful installation changes the component status to `INSTALLED`.
-5. Removal records a timestamp in `removed_at`. If the client omits `removed_at`, the API uses the current UTC time.
-6. The removal timestamp must be later than the installation timestamp.
-7. A successful removal changes the component status back to `REGISTERED`.
-8. Removal updates the existing installation record; it does not delete it. This preserves installation history.
-
-The create endpoint returns `404 Not Found` for a missing component or engine and `409 Conflict` when the component is not in `REGISTERED` status or already has an active installation. The removal endpoint returns `404 Not Found` when the installation or its component does not exist, and `409 Conflict` when the installation has already been removed. Invalid timestamp ordering returns `422 Unprocessable Entity`.
-
-The installation list endpoint supports optional `component_id` and `engine_id` filters, along with `skip` and `limit` pagination. Results are ordered by installation time in descending order.
-
-Example installation request (replace the UUIDs with existing component and engine records):
+Example installation request (replace IDs with existing records):
 
 ```json
 {
@@ -182,17 +152,113 @@ Example installation request (replace the UUIDs with existing component and engi
 }
 ```
 
-Example removal request:
+Example removal request using the current UTC time:
 
 ```json
 {}
 ```
 
-A client may optionally supply a timezone-aware `removed_at` value instead of allowing the API to use the current UTC time.
+### Aircraft Component Traceability API
+
+| Method | Endpoint | Description | Success |
+|---|---|---|---|
+| `GET` | `/aircraft/{aircraft_id}/traceability` | Retrieve an aircraft with associated engines, installation history, components, lifecycle events, and event organisations | `200 OK` |
+
+This read-only endpoint assembles existing relational records into a single nested response. It does not modify data and requires no database migration.
+
+The response hierarchy is:
+
+1. **Aircraft:** the aircraft identified by `aircraft_id`.
+2. **Engines:** engines whose `aircraft_id` references that aircraft.
+3. **Installations:** installation records associated with those engines, including active and removed installations.
+4. **Components:** component details for each installation.
+5. **Lifecycle events:** events associated with each referenced component, ordered by occurrence and recording time descending.
+6. **Organisations:** the organisation associated with each lifecycle event.
+
+A missing aircraft returns `404 Not Found`. An aircraft without engines returns an empty `engines` array. Engines without installations return an empty `installations` array; components without lifecycle events return an empty `lifecycle_events` array.
+
+Example request:
+
+```http
+GET /aircraft/303fe6bc-68b2-4227-8c7c-d40cd5e904f5/traceability
+```
+
+The response uses this general structure (values are illustrative):
+
+```json
+{
+  "aircraft": {
+    "id": "303fe6bc-68b2-4227-8c7c-d40cd5e904f5",
+    "registration": "VT-XYZ",
+    "manufacturer": "Airbus",
+    "model": "A320neo",
+    "serial_number": "AIR-2026-002",
+    "created_at": "2026-11-19T16:21:43.576168Z"
+  },
+  "engines": [
+    {
+      "engine": {
+        "id": "87412221-eb54-4ca7-b87b-915aec995f30",
+        "serial_number": "ENG-2026-002",
+        "manufacturer": "CFM International",
+        "model": "LEAP-1A",
+        "aircraft_id": "303fe6bc-68b2-4227-8c7c-d40cd5e904f5",
+        "created_at": "2026-11-19T16:26:58.329308Z"
+      },
+      "installations": [
+        {
+          "installation": {
+            "id": "9c02763d-84cd-40ca-a57d-de1470d539bd",
+            "component_id": "5487c281-4473-42b5-8fbf-4a1a3fac669c",
+            "engine_id": "87412221-eb54-4ca7-b87b-915aec995f30",
+            "installed_at": "2026-11-20T03:30:00Z",
+            "removed_at": null,
+            "installation_notes": "Installed on aircraft VT-XYZ for traceability verification"
+          },
+          "component": {
+            "component": {
+              "id": "5487c281-4473-42b5-8fbf-4a1a3fac669c",
+              "part_number": "PN-1001",
+              "serial_number": "SN-2026-001",
+              "manufacturer": "Airbus",
+              "component_type": "HYDRAULIC_PUMP",
+              "status": "INSTALLED",
+              "created_at": "2026-11-09T07:30:17.426375Z"
+            },
+            "lifecycle_events": [
+              {
+                "event": {
+                  "id": "08b44a0c-4997-41bd-840a-3c9a602e08f8",
+                  "component_id": "5487c281-4473-42b5-8fbf-4a1a3fac669c",
+                  "organisation_id": "5146c0bc-4c69-4d89-b677-3b40914be9b1",
+                  "event_type": "INSPECTION",
+                  "description": "Routine inspection of hydraulic pump.",
+                  "performed_by": "Maintenance Technician",
+                  "occurred_at": "2026-11-10T03:30:00Z",
+                  "recorded_at": "2026-11-09T19:00:00.245777Z"
+                },
+                "organisation": {
+                  "id": "5146c0bc-4c69-4d89-b677-3b40914be9b1",
+                  "name": "Aero Maintenance Services",
+                  "organisation_type": "MAINTENANCE",
+                  "code": "AMS001",
+                  "created_at": "2026-11-09T18:56:44.841052Z"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+The endpoint returns installation records for engines associated with the requested aircraft. Lifecycle events are associated with components, so the events shown represent the recorded component history, not a timeline filtered to one installation's date range.
 
 ### Health Check
 
-| Method | Endpoint | Description | Success response |
+| Method | Endpoint | Description | Success |
 |---|---|---|---|
 | `GET` | `/health` | Check API service health | `200 OK` |
 
@@ -209,18 +275,16 @@ The initial Alembic migration creates six core tables:
 | `lifecycle_events` | Component events, associated organisation, performer, and timestamps |
 | `installations` | Component-to-engine installation and removal records |
 
-The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints for key identifiers. The component identity constraint is defined over manufacturer, part number, and serial number. Alembic manages schema versioning and migration execution.
-
-The Aircraft, Engine, Organisation, Lifecycle Event, and Installation APIs use tables already created by the initial migration. The Aircraft API addition required no new schema migration because the aircraft table and model were already part of the initial schema.
+The schema uses UUID primary keys, foreign-key relationships, timestamp fields, and uniqueness constraints. Component identity is unique over manufacturer, part number, and serial number. Alembic manages schema versioning. The traceability endpoint reads from existing tables and introduces no additional table or migration.
 
 ### Backend and Configuration
 
 - FastAPI application with interactive OpenAPI documentation.
-- Pydantic request and response schemas.
+- Pydantic request and response schemas, including nested traceability response schemas.
 - Pydantic Settings for environment-based configuration.
 - SQLAlchemy ORM and a reusable database-session dependency.
 - Psycopg PostgreSQL driver.
-- Separate routers for aircraft, components, engines, organisations, lifecycle events, and installations.
+- Separate routers for aircraft, components, engines, organisations, lifecycle events, installations, and traceability.
 
 ### Containerised Development
 
@@ -237,7 +301,7 @@ The repository contains GitHub Actions workflows for:
 - **Docker Build CI:** building the backend Docker image as a CI validation step.
 - **CodeQL Advanced:** automated code scanning for Python and GitHub Actions workflows.
 
-The latest local backend test run for the Aircraft Management milestone reports **68 passing tests and 100% total application coverage** (491 statements, zero missed). Ruff linting and formatting checks should be run before committing. Check the GitHub Actions tab for the latest remote workflow results; workflow configuration alone does not guarantee that the latest run passed.
+The latest local test run for the traceability implementation reports **73 passing tests and 100% total application coverage (568 statements, zero missed)**. The five dedicated traceability tests cover missing aircraft, empty aircraft/engine relationships, and complete nested history. Run Ruff linting and formatting checks before committing. Check GitHub Actions for the latest remote workflow results; workflow configuration alone does not guarantee that the latest run passed.
 
 ## 3. Planned System Modules
 
@@ -284,7 +348,7 @@ These are planned capabilities and should not be interpreted as implemented func
 
 ## 5. Architecture
 
-AeroTrace is documented at two levels: the current deployment architecture, which shows the running infrastructure, and the current backend domain architecture, which shows implemented API groups and their persistence layer. The frontend and predictive-maintenance modules remain planned integrations.
+The current deployment architecture shows the running infrastructure. The backend domain architecture shows implemented API groups and their persistence layer. The frontend and predictive-maintenance modules remain planned integrations.
 
 ### Current Deployment Architecture
 
@@ -317,6 +381,7 @@ flowchart TB
         Organisations["Organisations"]
         Events["Lifecycle events"]
         Installations["Installations and removals"]
+        Traceability["Aircraft traceability"]
     end
     API --> Aircraft
     API --> Components
@@ -324,26 +389,26 @@ flowchart TB
     API --> Organisations
     API --> Events
     API --> Installations
-    Aircraft --> ORM["SQLAlchemy ORM"]
+    API --> Traceability
+    Aircraft --> ORM["SQLAlchemy persistence layer"]
     Components --> ORM
     Engines --> ORM
     Organisations --> ORM
     Events --> ORM
     Installations --> ORM
+    Traceability --> ORM
     ORM --> DB[("PostgreSQL 16")]
 ```
 
-### Aircraft and Engine Relationship
-
-An aircraft can be associated with multiple engines. Each engine stores an optional foreign key to its aircraft. The current API supports aircraft registration and retrieval, as well as engine registration with an existing `aircraft_id`.
+### Aircraft Component Traceability Flow
 
 ```mermaid
 flowchart TB
-    Aircraft["Aircraft<br/>registration · manufacturer · model"]
-    Engine1["Engine 1<br/>serial number · model"]
-    Engine2["Engine 2<br/>serial number · model"]
-    Aircraft --> Engine1
-    Aircraft --> Engine2
+    Aircraft["Aircraft"] --> Engines["Associated engines"]
+    Engines --> Installations["Installation history"]
+    Installations --> Components["Components"]
+    Components --> Events["Lifecycle events"]
+    Events --> Organisations["Performing organisations"]
 ```
 
 ### Target Application Architecture
@@ -354,7 +419,7 @@ The frontend, machine-learning services, and analytics views below are planned i
 flowchart TB
     User["User / Maintenance analyst"]
     UI["Frontend application<br/>React + TypeScript<br/>(planned)"]
-    API["FastAPI REST API<br/>Aircraft · Engines · Components<br/>Organisations · Lifecycle Events · Installations"]
+    API["FastAPI REST API<br/>Aircraft · Engines · Components<br/>Organisations · Events · Installations · Traceability"]
     subgraph Services["Future application services — planned"]
         ML["Machine learning and analytics<br/>Preprocessing · Anomaly detection · Prediction"]
         Reports["Analytics and visualisation<br/>Dashboards · Reports · Risk analysis"]
@@ -388,7 +453,8 @@ aerotrace/
 │   │   │       ├── engines.py
 │   │   │       ├── installations.py
 │   │   │       ├── lifecycle_events.py
-│   │   │       └── organisations.py
+│   │   │       ├── organisations.py
+│   │   │       └── traceability.py
 │   │   ├── core/
 │   │   │   ├── config.py
 │   │   │   └── database.py
@@ -401,7 +467,8 @@ aerotrace/
 │   │   │   ├── engine.py
 │   │   │   ├── installation.py
 │   │   │   ├── lifecycle_event.py
-│   │   │   └── organisation.py
+│   │   │   ├── organisation.py
+│   │   │   └── traceability.py
 │   │   └── main.py
 │   ├── migrations/
 │   │   ├── versions/
@@ -415,6 +482,7 @@ aerotrace/
 │   │   ├── test_installation_routes.py
 │   │   ├── test_lifecycle_event_routes.py
 │   │   ├── test_organisation_routes.py
+│   │   ├── test_traceability_routes.py
 │   │   ├── test_main.py
 │   │   └── test_models.py
 │   ├── Dockerfile
@@ -460,7 +528,7 @@ For direct local backend execution, create `backend/.env` with a connection stri
 DATABASE_URL=postgresql+psycopg://aerotrace:your_password@localhost:5432/aerotrace
 ```
 
-Use the actual username, password, host, and database configured in your environment. The local connection string must match the PostgreSQL credentials. When running the backend in Docker Compose, Compose supplies `DATABASE_URL` to the container using the `postgres` service hostname.
+Use the actual username, password, host, and database configured in your environment. When running the backend in Docker Compose, Compose supplies `DATABASE_URL` to the container using the `postgres` service hostname.
 
 ### Start the Application with Docker Compose
 
@@ -468,11 +536,6 @@ From the repository root:
 
 ```bash
 docker compose up --build -d
-```
-
-Check service status:
-
-```bash
 docker compose ps
 ```
 
@@ -480,21 +543,9 @@ The backend is available at `http://127.0.0.1:8000`, and PostgreSQL is exposed o
 
 ### Apply Database Migrations
 
-Run the schema migration inside the backend container:
-
 ```bash
 docker compose exec backend alembic upgrade head
-```
-
-Inspect the current migration revision:
-
-```bash
 docker compose exec backend alembic current
-```
-
-Check whether SQLAlchemy metadata and the migrated database schema differ:
-
-```bash
 docker compose exec backend alembic check
 ```
 
@@ -525,20 +576,15 @@ Linux/macOS:
 source .venv/bin/activate
 ```
 
-Install development dependencies:
+Install development dependencies, set `DATABASE_URL` in `backend/.env`, apply migrations, and start the development server:
 
 ```bash
 pip install -r requirements-dev.txt
-```
-
-Set `DATABASE_URL` in `backend/.env`, apply migrations, and start the development server:
-
-```bash
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Run backend commands such as `uvicorn`, `pytest`, and Ruff from the `backend` directory. Do not start a second backend on port `8000` while the Docker backend is already using that port. When source files change and the Docker backend is in use, rebuild the backend image and recreate only that service:
+Run backend commands such as `uvicorn`, `pytest`, and Ruff from the `backend` directory. Do not start a second backend on port `8000` while the Docker backend is already using that port. When source files change and the Docker backend is in use, rebuild only that service:
 
 ```bash
 docker compose build backend
@@ -555,23 +601,17 @@ This leaves the PostgreSQL service and its persistent volume in place.
 | OpenAPI schema | http://127.0.0.1:8000/openapi.json |
 | Health check | http://127.0.0.1:8000/health |
 
-The Swagger UI groups the endpoints by router and can be used to exercise aircraft, component, engine, organisation, lifecycle-event, and installation operations.
+Swagger UI groups operations by router and can be used to exercise the implemented APIs.
 
 ## 8. Testing and Code Quality
 
-From the `backend` directory, install development dependencies:
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Run the automated tests under the `tests` directory with coverage enforcement:
+Run automated tests from the `backend` directory:
 
 ```bash
 python -m pytest tests --cov=app --cov-report=term-missing --cov-fail-under=90
 ```
 
-The latest local test run for the Aircraft Management milestone reports **68 passing tests and 100% total application coverage (491 statements, zero missed)**. The command deliberately targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match your PostgreSQL configuration. The GitHub Actions workflow provides its own test database credentials.
+The latest local run for the traceability implementation reports **73 passing tests and 100% total application coverage (568 statements, zero missed)**. The command targets `tests/` and does not collect the separate `backend/test_db.py` database-connection smoke script. That script uses the local `DATABASE_URL` and should only be run when its credentials match the PostgreSQL configuration.
 
 Run linting and formatting checks from the `backend` directory:
 
@@ -586,24 +626,23 @@ The Backend CI workflow also validates migrations against a fresh CI PostgreSQL 
 
 ### Backend and Database
 
-- [x] Initial FastAPI backend setup.
-- [x] Environment-based application configuration.
-- [x] SQLAlchemy database foundation and database-session dependency.
+- [x] Initial FastAPI backend setup and environment-based configuration.
+- [x] SQLAlchemy database foundation and reusable database-session dependency.
 - [x] PostgreSQL 16 Docker Compose service with persistent storage.
 - [x] Backend Dockerfile and container orchestration.
-- [x] Initial relational schema for aircraft, engines, components, organisations, lifecycle events, and installations.
-- [x] Alembic migration for the initial core tables.
+- [x] Initial relational schema and Alembic migration for aircraft, engines, components, organisations, lifecycle events, and installations.
 - [x] Aircraft registration, listing, and retrieval APIs.
 - [x] Engine registration, listing, and retrieval APIs, including optional aircraft association.
 - [x] Component registration, listing, retrieval, and update APIs.
 - [x] Organisation registration and listing APIs.
-- [x] Lifecycle-event creation, filtered listing, and individual retrieval APIs.
+- [x] Lifecycle-event creation, filtered listing, and retrieval APIs.
 - [x] Component installation, installation history, and removal APIs.
 - [x] Component status transitions on installation and removal.
-- [x] Automated route tests for aircraft, components, engines, organisations, lifecycle events, and installations.
-- [x] Local backend test run: 68 tests passed with 100% total application coverage.
-- [x] Aircraft and engine association verified through the running API.
-- [x] Backend CI, Docker build CI, and CodeQL workflows configured.
+- [x] Aircraft-level component traceability endpoint and nested response schemas.
+- [x] Automated route tests for the implemented API groups.
+- [x] Local backend test run: 73 tests passed with 100% total application coverage.
+- [x] Aircraft, engine, installation, and lifecycle traceability verified against the running Docker/PostgreSQL environment.
+- [x] Backend CI, Docker Build CI, and CodeQL workflows configured.
 - [ ] Authentication, authorisation, and audit controls.
 - [ ] Expanded integration and concurrency testing against PostgreSQL.
 - [ ] Query optimisation and operational monitoring.

@@ -6,6 +6,7 @@ from app.api.routes.engines import router as engines_router
 from app.api.routes.installations import router as installations_router
 from app.api.routes.lifecycle_events import router as lifecycle_events_router
 from app.api.routes.organisations import router as organisations_router
+from app.api.routes.traceability import router as traceability_router
 
 app = FastAPI(
     title="AeroTrace API",
@@ -19,6 +20,7 @@ app.include_router(engines_router)
 app.include_router(installations_router)
 app.include_router(organisations_router)
 app.include_router(lifecycle_events_router)
+app.include_router(traceability_router)
 
 
 @app.get("/health")
